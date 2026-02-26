@@ -1,8 +1,20 @@
 import { Hono } from 'hono'
 import { html } from 'hono/html'
 import { serveStatic } from 'hono/cloudflare-workers'
+import adminRouter from './routes/admin/index'
+import { accessControlRoute } from './routes/user/access-control'
+import { alertsRoute } from './routes/user/alerts'
+import { logsRoute } from './routes/user/logs'
 
 const app = new Hono()
+
+// Mount admin backend
+app.route('/admin', adminRouter)
+
+// Mount user routes
+app.route('/', accessControlRoute)
+app.route('/', alertsRoute)
+app.route('/', logsRoute)
 
 // Serve static files from public/
 app.use('/static/*', serveStatic({ root: './' }))
