@@ -6,6 +6,8 @@ import { accessControlRoute } from './routes/user/access-control'
 import { alertsRoute } from './routes/user/alerts'
 import { logsRoute } from './routes/user/logs'
 import { originConfigRoute, ticketsUserRoute } from './routes/user/origin-tickets'
+import { performanceRoute } from './routes/user/performance'
+import { apiDocsRoute } from './routes/user/api-docs'
 
 const app = new Hono()
 
@@ -18,6 +20,8 @@ app.route('/', alertsRoute)
 app.route('/', logsRoute)
 app.route('/', originConfigRoute)
 app.route('/', ticketsUserRoute)
+app.route('/', performanceRoute)
+app.route('/', apiDocsRoute)
 
 // Serve static files from public/
 app.use('/static/*', serveStatic({ root: './' }))
