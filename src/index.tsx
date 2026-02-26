@@ -1,7 +1,11 @@
 import { Hono } from 'hono'
 import { html } from 'hono/html'
+import { serveStatic } from 'hono/cloudflare-workers'
 
 const app = new Hono()
+
+// Serve static files from public/
+app.use('/static/*', serveStatic({ root: './' }))
 
 // ===================== SHARED COMPONENTS =====================
 
