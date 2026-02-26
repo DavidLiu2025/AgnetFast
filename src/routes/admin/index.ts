@@ -92,6 +92,47 @@ adminRouter.get('/api/dns-rules', (c) => {
   return c.json({ rules: MOCK_DNS_RULES, total: MOCK_DNS_RULES.length })
 })
 
+adminRouter.post('/api/dns-rules', async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any
+  if (!body.name) return c.json({ error: 'name is required' }, 400)
+  return c.json({
+    id: `d-${Date.now()}`,
+    name: body.name,
+    match: body.match || '',
+    nodeGroup: body.nodeGroup || '',
+    weight: body.weight ?? 100,
+    ttl: body.ttl ?? 60,
+    status: 'active',
+  }, 201)
+})
+
+adminRouter.put('/api/dns-rules/:id', async (c) => {
+  const id = c.req.param('id')
+  const rule = MOCK_DNS_RULES.find(r => r.id === id)
+  if (!rule) return c.json({ error: 'not found' }, 404)
+  const body = await c.req.json().catch(() => ({})) as any
+  return c.json({ success: true, id, ...body })
+})
+
+adminRouter.patch('/api/dns-rules/:id/toggle', (c) => {
+  const id = c.req.param('id')
+  const rule = MOCK_DNS_RULES.find(r => r.id === id)
+  if (!rule) return c.json({ error: 'not found' }, 404)
+  const newStatus = rule.status === 'active' ? 'inactive' : 'active'
+  return c.json({ success: true, id, status: newStatus })
+})
+
+adminRouter.get('/api/dns/health', (c) => {
+  return c.json({
+    nodes: MOCK_NODES.map(n => ({
+      name: n.name,
+      status: n.status,
+      latency: n.status === 'offline' ? null : Math.round(5 + Math.random() * 30),
+      lastCheck: new Date().toISOString(),
+    }))
+  })
+})
+
 // ─── Scheduling Strategy ──────────────────────────────────────────────────────
 adminRouter.get('/scheduling', (c) => {
   return c.html(AdminLayout({ title: '调度策略', activeNav: 'admin-scheduling', children: schedulingHtml() }))
@@ -102,12 +143,29 @@ adminRouter.get('/domains/review', (c) => {
   return c.html(AdminLayout({ title: '域名审核', activeNav: 'admin-domain-review', children: domainReviewHtml() }))
 })
 
+// GET 审核列表
+adminRouter.get('/api/domains/review', (c) => {
+  return c.json({ domains: MOCK_PENDING_DOMAINS, total: MOCK_PENDING_DOMAINS.length })
+})
+
+// GET 审核统计
+adminRouter.get('/api/domains/review/stats', (c) => {
+  return c.json({
+    pending:   MOCK_PENDING_DOMAINS.filter(d => d.status === 'pending').length,
+    reviewing: MOCK_PENDING_DOMAINS.filter(d => d.status === 'reviewing').length,
+    approved:  0,
+    rejected:  1,
+    total:     MOCK_PENDING_DOMAINS.length,
+  })
+})
+
 adminRouter.post('/api/domains/review/:id/approve', (c) => {
   return c.json({ success: true, id: c.req.param('id'), status: 'approved' })
 })
 
 adminRouter.post('/api/domains/review/:id/reject', async (c) => {
   const body = await c.req.json().catch(() => ({})) as any
+  if (!body.reason) return c.json({ error: 'reason is required' }, 400)
   return c.json({ success: true, id: c.req.param('id'), status: 'rejected', reason: body.reason })
 })
 
@@ -128,6 +186,91 @@ adminRouter.get('/packages', (c) => {
 // alias
 adminRouter.get('/plans', (c) => c.redirect('/admin/packages'))
 
+// ─── Finance API ──────────────────────────────────────────────────────────────
+adminRouter.get('/api/finance/overview', (c) => {
+  return c.json(MOCK_FINANCE)
+})
+
+adminRouter.get('/api/finance/invoices', (c) => {
+  const invoices = MOCK_CUSTOMERS.map((cu, i) => ({
+    id: `INV-2026${String(i + 1).padStart(4, '0')}`,
+    customer: cu.name,
+    company: cu.company,
+    plan: cu.plan,
+    amount: cu.spend,
+    status: i < 4 ? 'paid' : 'pending',
+    period: '2026-02',
+  }))
+  return c.json({ invoices, total: invoices.length })
+})
+
+adminRouter.get('/api/finance/trend', (c) => {
+  const months = ['2025-09','2025-10','2025-11','2025-12','2026-01','2026-02']
+  const revenues = [182000, 214000, 238000, 251000, 273000, 284600]
+  return c.json({ months: months.map((m, i) => ({ month: m, revenue: revenues[i] })) })
+})
+
+// ─── Security API ─────────────────────────────────────────────────────────────
+adminRouter.get('/api/security/overview', (c) => {
+  return c.json({
+    blockedToday: 1284,
+    activeDDoS: 2,
+    blacklistCount: 386,
+    wafHits: 437,
+    coverageRate: 99.94,
+  })
+})
+
+adminRouter.get('/api/security/events', (c) => {
+  const events = [
+    { time: '14:23:11', ip: '103.21.244.18', type: 'DDoS UDP Flood', target: 'cdn.shopxyz.cn',      action: '已缓解', peak: '12.4 Gbps' },
+    { time: '13:45:02', ip: '45.138.0.44',   type: 'CC攻击',          target: 'api.fastgame.io',    action: '已拦截', peak: '8,400 req/s' },
+    { time: '11:20:33', ip: '192.3.88.91',   type: 'SQL注入',          target: '多个域名',           action: '已拦截', peak: '-' },
+    { time: '09:12:55', ip: '198.51.100.23', type: 'XSS探测',          target: 'img.newsportal.com', action: '已拦截', peak: '-' },
+  ]
+  return c.json({ events, total: events.length })
+})
+
+adminRouter.post('/api/security/blacklist', async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any
+  if (!body.ip) return c.json({ error: 'ip is required' }, 400)
+  return c.json({ success: true, ip: body.ip, reason: body.reason, addedAt: new Date().toISOString() }, 201)
+})
+
+// ─── Packages API ─────────────────────────────────────────────────────────────
+const MOCK_PACKAGES = [
+  { id: 'p001', name: '免费版',       price: 0,    traffic: '10GB/月',   domains: 1,  status: 'active', users: 28 },
+  { id: 'p002', name: '专业版 Pro',   price: 299,  traffic: '1TB/月',    domains: 10, status: 'active', users: 142 },
+  { id: 'p003', name: '企业版',       price: 1299, traffic: '无限流量',  domains: 99, status: 'active', users: 35 },
+  { id: 'p004', name: '按量计费',     price: 0,    traffic: '¥0.12/GB', domains: 5,  status: 'active', users: 67 },
+]
+
+adminRouter.get('/api/packages', (c) => {
+  return c.json({ packages: MOCK_PACKAGES, total: MOCK_PACKAGES.length })
+})
+
+adminRouter.post('/api/packages', async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any
+  if (!body.name) return c.json({ error: 'name is required' }, 400)
+  return c.json({
+    id: `p-${Date.now()}`,
+    name: body.name,
+    price: body.price ?? 0,
+    traffic: body.traffic ?? '-',
+    domains: body.domains ?? 1,
+    status: 'active',
+    users: 0,
+  }, 201)
+})
+
+adminRouter.put('/api/packages/:id', async (c) => {
+  const id = c.req.param('id')
+  const pkg = MOCK_PACKAGES.find(p => p.id === id)
+  if (!pkg) return c.json({ error: 'not found' }, 404)
+  const body = await c.req.json().catch(() => ({})) as any
+  return c.json({ success: true, id, ...body })
+})
+
 // ─── Tickets ──────────────────────────────────────────────────────────────────
 adminRouter.get('/tickets', (c) => {
   return c.html(AdminLayout({ title: '工单系统', activeNav: 'admin-tickets', children: ticketsHtml() }))
@@ -138,11 +281,86 @@ adminRouter.get('/audit-logs', (c) => {
   return c.html(AdminLayout({ title: '操作审计', activeNav: 'admin-audit-logs', children: auditLogsHtml() }))
 })
 
+// M18: 审计日志 API
+const MOCK_AUDIT_LOGS = [
+  { id: 'al001', operator: 'admin', action: 'login',    resource: 'system',    ip: '1.2.3.4',   createdAt: '2026-02-25T08:00:00Z', detail: '管理员登录' },
+  { id: 'al002', operator: 'admin', action: 'suspend',  resource: 'customer',  ip: '1.2.3.4',   createdAt: '2026-02-25T09:10:00Z', detail: '封禁客户c003' },
+  { id: 'al003', operator: 'ops1',  action: 'login',    resource: 'system',    ip: '5.6.7.8',   createdAt: '2026-02-25T09:30:00Z', detail: '运营登录' },
+  { id: 'al004', operator: 'admin', action: 'approve',  resource: 'domain',    ip: '1.2.3.4',   createdAt: '2026-02-25T10:00:00Z', detail: '审核域名' },
+  { id: 'al005', operator: 'ops1',  action: 'update',   resource: 'node',      ip: '5.6.7.8',   createdAt: '2026-02-25T11:00:00Z', detail: '更新节点配置' },
+  { id: 'al006', operator: 'admin', action: 'login',    resource: 'system',    ip: '1.2.3.4',   createdAt: '2026-02-26T08:00:00Z', detail: '管理员登录' },
+  { id: 'al007', operator: 'ops2',  action: 'reject',   resource: 'domain',    ip: '9.10.11.12', createdAt: '2026-02-26T09:00:00Z', detail: '拒绝域名申请' },
+  { id: 'al008', operator: 'admin', action: 'update',   resource: 'settings',  ip: '1.2.3.4',   createdAt: '2026-02-26T10:00:00Z', detail: '更新系统配置' },
+  { id: 'al009', operator: 'ops1',  action: 'login',    resource: 'system',    ip: '5.6.7.8',   createdAt: '2026-02-26T10:30:00Z', detail: '运营登录' },
+  { id: 'al010', operator: 'admin', action: 'delete',   resource: 'package',   ip: '1.2.3.4',   createdAt: '2026-02-26T11:00:00Z', detail: '删除套餐' },
+]
+
+adminRouter.get('/api/audit-logs', (c) => {
+  const { action, operator, page = '1', limit = '20' } = c.req.query()
+  let logs = [...MOCK_AUDIT_LOGS]
+  if (action)   logs = logs.filter(l => l.action   === action)
+  if (operator) logs = logs.filter(l => l.operator === operator)
+  const p = parseInt(page), lim = parseInt(limit)
+  const start = (p - 1) * lim
+  const paged = logs.slice(start, start + lim)
+  return c.json({ logs: paged, total: logs.length, page: p, limit: lim })
+})
+
+adminRouter.get('/api/audit-logs/export', (c) => {
+  const header = 'id,operator,action,resource,ip,createdAt,detail\n'
+  const rows = MOCK_AUDIT_LOGS.map(l =>
+    `${l.id},${l.operator},${l.action},${l.resource},${l.ip},${l.createdAt},"${l.detail}"`
+  ).join('\n')
+  return new Response(header + rows, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="audit-logs.csv"',
+    },
+  })
+})
+
 // ─── Settings / System ────────────────────────────────────────────────────────
 adminRouter.get('/settings', (c) => {
   return c.html(AdminLayout({ title: '系统配置', activeNav: 'admin-system', children: settingsHtml() }))
 })
 adminRouter.get('/system', (c) => c.redirect('/admin/settings'))
+
+// M19: 系统配置 API (in-memory state for demo)
+const sysSettings = {
+  platform: { siteName: 'AgentFast CDN', maxDomains: 10, defaultPlan: 'basic', maintenanceMode: false },
+  smtp:     { host: 'smtp.agentfast.com', port: 465, user: 'no-reply@agentfast.com', secure: true },
+  security: { maxLoginAttempts: 3, sessionTimeout: 1800, ipWhitelist: [], twoFactorRequired: false },
+}
+
+adminRouter.get('/api/settings', (c) => {
+  return c.json({ settings: sysSettings })
+})
+
+adminRouter.put('/api/settings/platform', async (c) => {
+  const body = await c.req.json()
+  Object.assign(sysSettings.platform, body)
+  return c.json({ success: true, settings: sysSettings.platform })
+})
+
+adminRouter.put('/api/settings/smtp', async (c) => {
+  const body = await c.req.json()
+  if (!body.host) return c.json({ error: 'host is required' }, 400)
+  Object.assign(sysSettings.smtp, body)
+  return c.json({ success: true, settings: sysSettings.smtp })
+})
+
+adminRouter.post('/api/settings/smtp/test', async (c) => {
+  const body = await c.req.json()
+  const to = body?.to || 'admin@example.com'
+  // 模拟发送测试邮件（demo无需真实发送）
+  return c.json({ success: true, message: `测试邮件已发送至 ${to}`, timestamp: new Date().toISOString() })
+})
+
+adminRouter.put('/api/settings/security', async (c) => {
+  const body = await c.req.json()
+  Object.assign(sysSettings.security, body)
+  return c.json({ success: true, settings: sysSettings.security })
+})
 
 export default adminRouter
 
