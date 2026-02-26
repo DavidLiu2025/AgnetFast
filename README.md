@@ -153,7 +153,8 @@ npm test -- --watch   # 监听模式
 
 | 项目 | 状态 |
 |------|------|
-| **平台** | Cloudflare Pages（待配置 API Key） |
+| **平台** | Cloudflare Pages ✅ 已上线 |
+| **生产地址** | https://agentfast-cdn.pages.dev |
 | **GitHub** | ✅ https://github.com/DavidLiu2025/AgnetFast |
 | **测试** | ✅ 211/211 通过 |
 | **最后构建** | 2026-02-26，275 KB |
